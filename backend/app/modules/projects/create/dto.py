@@ -1,0 +1,12 @@
+"""Internal DTOs for projects.create."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass
+class CreateDTO:
+    """Internal transfer object."""
+
+    pass

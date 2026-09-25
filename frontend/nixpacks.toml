@@ -1,0 +1,19 @@
+# Install with devDependencies so `tsc` / `vite` are available at build time.
+# NODE_ENV=production would otherwise omit them during npm ci.
+[phases.install]
+cmds = ["npm ci --include=dev"]
+cacheDirectories = ["/root/.npm"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+NPM_CONFIG_PRODUCTION = "false"
+# Runtime proxy target for /api/* (Railway: reference Backend service public URL).
+# Example:
+#   BACKEND_URL=https://repository-audit-production.up.railway.app
+#   VITE_API_BASE_URL=/api/v1

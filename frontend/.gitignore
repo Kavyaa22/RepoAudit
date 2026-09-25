@@ -1,0 +1,17 @@
+# Frontend-local ignores (product root). Root .gitignore still covers the monorepo.
+
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+Thumbs.db
+
+.vscode/*
+!.vscode/extensions.json
+.idea/

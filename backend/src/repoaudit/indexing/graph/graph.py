@@ -1,0 +1,371 @@
+"""dependency graph construction and PageRank ranking."""
+
+from __future__ import annotations
+
+import hashlib
+import posixpath
+import re
+from pathlib import Path, PurePosixPath
+
+import networkx as nx
+
+from repoaudit.indexing.models import ProjectContext
+
+# import pattern regexes by language
+_IMPORT_PATTERNS = {
+    "python": [
+        re.compile(r"^\s*import\s+([\w.]+)", re.MULTILINE),
+        re.compile(r"^\s*from\s+([\w.]+)\s+import", re.MULTILINE),
+    ],
+    "javascript": [
+        re.compile(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", re.MULTILINE),
+        re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""", re.MULTILINE),
+    ],
+    "typescript": [
+        re.compile(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", re.MULTILINE),
+        re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""", re.MULTILINE),
+    ],
+    "go": [
+        re.compile(r'"([^"]+)"', re.MULTILINE),
+    ],
+    "rust": [
+        re.compile(r"^\s*use\s+([\w:]+)", re.MULTILINE),
+        re.compile(r"^\s*mod\s+(\w+)", re.MULTILINE),
+    ],
+    "java": [
+        re.compile(r"^\s*import\s+([\w.]+);", re.MULTILINE),
+    ],
+}
+
+# also cover jsx/tsx/mjs etc
+for alias in ("jsx", "tsx", "mjs", "cjs"):
+    _IMPORT_PATTERNS[alias] = _IMPORT_PATTERNS["javascript"]
+
+
+class DependencyGraph:
+    """file dependency graph with PageRank scoring."""
+
+    def __init__(self):
+        self.graph = nx.DiGraph()
+        self._file_paths: set[str] = set()
+
+    @classmethod
+    def build_from_project(cls, project: ProjectContext) -> DependencyGraph:
+        dg = cls()
+        path_set = {_posix_path(f.path) for f in project.files}
+        dg._file_paths = path_set
+
+        # add all files as nodes (POSIX ids so Windows scans still resolve)
+        for f in project.files:
+            dg.graph.add_node(_posix_path(f.path), language=f.language, lines=f.lines)
+
+        # parse imports and create edges
+        for f in project.files:
+            content = f.content or f.preview
+            if not content:
+                continue
+
+            src = _posix_path(f.path)
+            patterns = _IMPORT_PATTERNS.get(f.language, [])
+            for pat in patterns:
+                for match in pat.finditer(content):
+                    import_path = match.group(1)
+                    resolved = _resolve_import(import_path, src, f.language, path_set)
+                    if resolved and resolved != src:
+                        dg.graph.add_edge(src, resolved)
+
+        return dg
+
+    def rank_files(self) -> list[tuple[str, float]]:
+        """return files ranked by PageRank (most important first)."""
+        if not self.graph.nodes:
+            return []
+        try:
+            scores = _pagerank_power_iteration(self.graph, alpha=0.85)
+        except Exception:
+            # fallback: uniform scores if PageRank fails (convergence, etc.)
+            scores = {n: 1.0 / len(self.graph) for n in self.graph}
+        return sorted(scores.items(), key=lambda x: -x[1])
+
+    def get_core_files(self, top_n: int = 10) -> list[str]:
+        """top N most important files by PageRank."""
+        return [path for path, _ in self.rank_files()[:top_n]]
+
+    def get_module_dependencies(self) -> dict[str, set[str]]:
+        """edges between top-level directory modules."""
+        deps: dict[str, set[str]] = {}
+        for src, dst in self.graph.edges:
+            src_mod = _get_module(src)
+            dst_mod = _get_module(dst)
+            if src_mod != dst_mod:
+                deps.setdefault(src_mod, set()).add(dst_mod)
+        return deps
+
+    def get_cluster_dependencies(self) -> dict[str, set[str]]:
+        """edges between path clusters (e.g. backend/repoaudit/indexing)."""
+        deps: dict[str, set[str]] = {}
+        for src, dst in self.graph.edges:
+            src_c = _cluster_path(src)
+            dst_c = _cluster_path(dst)
+            if src_c != dst_c:
+                deps.setdefault(src_c, set()).add(dst_c)
+        return deps
+
+    def to_mermaid(self, max_file_nodes: int = 36, max_file_edges: int = 55) -> str:
+        """Mermaid flowchart: clustered packages, then file-level if needed."""
+        cluster_deps = self.get_cluster_dependencies()
+        if cluster_deps:
+            edges = [
+                (src, dst)
+                for src, targets in sorted(cluster_deps.items())
+                for dst in sorted(targets)
+            ]
+            return _render_mermaid_edges(edges, lambda name: name)
+        return self._file_level_mermaid(max_file_nodes, max_file_edges)
+
+    def _file_level_mermaid(self, max_nodes: int, max_edges: int) -> str:
+        if self.graph.number_of_edges() == 0:
+            return ""
+        ranked = {path: i for i, (path, _) in enumerate(self.rank_files())}
+        scored_edges = sorted(
+            self.graph.edges,
+            key=lambda e: (ranked.get(e[0], 10_000) + ranked.get(e[1], 10_000), e[0], e[1]),
+        )
+        node_set: set[str] = set()
+        edges: list[tuple[str, str]] = []
+        for src, dst in scored_edges:
+            newcomers = [n for n in (src, dst) if n not in node_set]
+            if len(node_set) + len(newcomers) > max_nodes:
+                continue
+            node_set.update(newcomers)
+            edges.append((src, dst))
+            if len(edges) >= max_edges:
+                break
+        if not edges:
+            return ""
+        return _render_mermaid_edges(edges, _short_label)
+
+    def get_entry_points(self) -> list[str]:
+        """files with few incoming edges that still import other modules.
+
+        These are likely top-level entry points: little or nothing in the
+        project depends on them, yet they pull in other code. Files with no
+        edges at all are not entry points -- see find_isolated_files().
+        """
+        entries = []
+        for node in self.graph.nodes:
+            if self.graph.in_degree(node) <= 1 and self.graph.out_degree(node) > 0:
+                entries.append(node)
+        return entries
+
+    def find_isolated_files(self) -> list[str]:
+        """files with no import edges in either direction -- likely dead code.
+
+        An isolated file imports nothing in the project and is imported by
+        nothing: a stray script, dead code, or a module that should be wired in
+        but never was. Distinct from an entry point, which does pull in other
+        modules. Deterministic.
+        """
+        isolated = [
+            node
+            for node in self.graph.nodes
+            if self.graph.in_degree(node) == 0 and self.graph.out_degree(node) == 0
+        ]
+        return sorted(isolated)
+
+    def find_circular_dependencies(self, limit: int = 10) -> list[list[str]]:
+        """groups of files that import each other in a cycle.
+
+        Circular dependencies make a codebase harder to read and refactor -- you
+        can't fully understand one file without the others, and they invite
+        import-time ordering bugs. Returns each strongly connected component of
+        more than one file (a genuine cycle), largest first. Deterministic.
+        """
+        cycles = [
+            sorted(scc) for scc in nx.strongly_connected_components(self.graph) if len(scc) > 1
+        ]
+        cycles.sort(key=lambda c: (-len(c), c[0]))
+        return cycles[:limit]
+
+
+def _pagerank_power_iteration(
+    graph: nx.DiGraph,
+    alpha: float = 0.85,
+    max_iter: int = 100,
+    tol: float = 1.0e-6,
+) -> dict[str, float]:
+    """PageRank via plain power iteration.
+
+    networkx 3.6 moved its own implementation onto scipy, which RepoAudit does
+    not depend on -- and pulling in scipy for one algorithm is a bad trade for
+    a CLI install. This is the textbook iterative version, deterministic.
+    """
+    nodes = list(graph.nodes)
+    n = len(nodes)
+    if n == 0:
+        return {}
+    out_degree = {node: graph.out_degree(node) for node in nodes}
+    scores = {node: 1.0 / n for node in nodes}
+    for _ in range(max_iter):
+        # dangling nodes (no out-edges) redistribute their share uniformly
+        dangling = sum(scores[node] for node in nodes if out_degree[node] == 0)
+        new_scores = {}
+        for node in nodes:
+            incoming = sum(
+                scores[pred] / out_degree[pred]
+                for pred in graph.predecessors(node)
+                if out_degree[pred] > 0
+            )
+            new_scores[node] = (1 - alpha) / n + alpha * (incoming + dangling / n)
+        if sum(abs(new_scores[node] - scores[node]) for node in nodes) < tol:
+            scores = new_scores
+            break
+        scores = new_scores
+    return scores
+
+
+_SKIP_CLUSTER_SEGMENTS = {
+    "src",
+    "lib",
+    "pkg",
+    "internal",
+    "python",
+    "site-packages",
+}
+
+
+def _get_module(path: str) -> str:
+    parts = Path(path).parts
+    if len(parts) <= 1:
+        return "root"
+    mod = parts[0]
+    if mod in ("src", "lib", "pkg", "internal", "app") and len(parts) > 2:
+        return parts[1]
+    return mod
+
+
+def _cluster_path(path: str, max_parts: int = 3) -> str:
+    """Stable package cluster for diagrams (deeper than a single top-level folder)."""
+    parts = [p for p in path.replace("\\", "/").split("/") if p]
+    if not parts:
+        return "root"
+    if len(parts) > 1 and "." in parts[-1]:
+        parts = parts[:-1]
+    filtered = [p for p in parts if p.lower() not in _SKIP_CLUSTER_SEGMENTS]
+    if not filtered:
+        filtered = parts[:1]
+    return "/".join(filtered[:max_parts]) or "root"
+
+
+def _posix_path(path: str) -> str:
+    return path.replace("\\", "/").strip("/")
+
+
+def _short_label(path: str, max_len: int = 42) -> str:
+    posix = _posix_path(path)
+    if len(posix) <= max_len:
+        return posix
+    return "…" + posix[-(max_len - 1) :]
+
+
+def _mermaid_label(text: str) -> str:
+    return text.replace("\\", "/").replace('"', "'")
+
+
+def _mermaid_id(name: str) -> str:
+    """Stable unique Mermaid node ID (avoids collisions after sanitizing paths)."""
+    digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:10]
+    return f"n{digest}"
+
+
+def _render_mermaid_edges(
+    edges: list[tuple[str, str]],
+    label_fn,
+) -> str:
+    if not edges:
+        return ""
+    lines = ["graph TD"]
+    seen_nodes: set[str] = set()
+    seen_edges: set[tuple[str, str]] = set()
+    for src, dst in edges:
+        if (src, dst) in seen_edges or src == dst:
+            continue
+        seen_edges.add((src, dst))
+        s = _mermaid_id(src)
+        d = _mermaid_id(dst)
+        if src not in seen_nodes:
+            lines.append(f'  {s}["{_mermaid_label(label_fn(src))}"]')
+            seen_nodes.add(src)
+        if dst not in seen_nodes:
+            lines.append(f'  {d}["{_mermaid_label(label_fn(dst))}"]')
+            seen_nodes.add(dst)
+        lines.append(f"  {s} --> {d}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _resolve_import(
+    import_path: str,
+    source_file: str,
+    language: str,
+    known_paths: set[str],
+) -> str | None:
+    """try to resolve an import string to an actual file path in the project."""
+    source_file = _posix_path(source_file)
+    known = {_posix_path(p) for p in known_paths}
+    if language in ("python", "pyi"):
+        rel = _resolve_python_module(import_path, source_file)
+        candidates = [
+            f"{rel}.py",
+            f"{rel}/__init__.py",
+        ]
+        if not rel.startswith("src/"):
+            candidates.extend([f"src/{rel}.py", f"src/{rel}/__init__.py"])
+    elif language in ("javascript", "typescript", "jsx", "tsx", "mjs", "cjs"):
+        if import_path.startswith("."):
+            base_dir = str(PurePosixPath(source_file).parent)
+            rel = posixpath.normpath(posixpath.join(base_dir, import_path))
+        else:
+            rel = import_path
+        candidates = [
+            rel,
+            f"{rel}.ts", f"{rel}.tsx", f"{rel}.js", f"{rel}.jsx",
+            f"{rel}.mjs", f"{rel}.cjs",
+            f"{rel}/index.ts", f"{rel}/index.tsx", f"{rel}/index.js",
+            f"{rel}/index.jsx", f"{rel}/index.mjs", f"{rel}/index.cjs",
+        ]
+    elif language == "go":
+        # go imports are package paths, hard to resolve without go.mod
+        parts = import_path.split("/")
+        if len(parts) >= 2:
+            candidates = [f"{'/'.join(parts[-2:])}.go"]
+        else:
+            return None
+    elif language == "rust":
+        rel = import_path.split("::")[0].replace("::", "/")
+        candidates = [f"src/{rel}.rs", f"src/{rel}/mod.rs", f"{rel}.rs"]
+    elif language == "java":
+        rel = import_path.replace(".", "/")
+        candidates = [f"src/main/java/{rel}.java", f"{rel}.java"]
+    else:
+        return None
+
+    for c in candidates:
+        c = posixpath.normpath(c.replace("\\", "/")).strip("/")
+        if c in known:
+            return c
+
+    return None
+
+
+def _resolve_python_module(import_path: str, source_file: str) -> str:
+    leading_dots = len(import_path) - len(import_path.lstrip("."))
+    module = import_path[leading_dots:].replace(".", "/")
+    if not leading_dots:
+        return module
+
+    source_dir = PurePosixPath(_posix_path(source_file)).parent.parts
+    keep = max(0, len(source_dir) - leading_dots + 1)
+    parts = [*source_dir[:keep]]
+    if module:
+        parts.extend(module.split("/"))
+    return "/".join(parts)

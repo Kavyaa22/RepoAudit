@@ -1,0 +1,19 @@
+providers = ["python"]
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.12"
+REPOAUDIT_SECURITY_TOOLS_DIR = "/app/.security-tools"
+
+[phases.setup]
+# git: repository clone/import; curl/tar: Gitleaks + OSV-Scanner; ca-certificates: HTTPS
+aptPkgs = ["git", "ca-certificates", "curl", "tar"]
+
+[phases.install]
+cmds = [
+  "python3 -m pip install -r requirements.txt || /opt/venv/bin/pip install -r requirements.txt",
+  "chmod +x scripts/install_security_tools.sh",
+  "sh scripts/install_security_tools.sh",
+]
+
+[start]
+cmd = "sh -c 'export REPOAUDIT_SECURITY_TOOLS_DIR=\"${REPOAUDIT_SECURITY_TOOLS_DIR:-$PWD/.security-tools}\" && export PATH=\"$REPOAUDIT_SECURITY_TOOLS_DIR:$PATH\" && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}'"

@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+@theme {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.75rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 2.25rem;
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+  body {
+    background-color: #f4f6fa;
+    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 1.125rem;
+  }
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Wiki report: clean typography and proportionate content widths */
+.wiki-prose-narrow {
+  max-width: 56rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.wiki-prose-wide {
+  max-width: 80rem;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+/* Ensure code blocks with dark backgrounds always display crisp, light-shade text */
+pre,
+.wiki-prose pre {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+pre code,
+.wiki-prose pre code {
+  color: #f1f5f9 !important;
+  background-color: transparent !important;
+}
+
+pre p,
+.wiki-prose pre p,
+pre span,
+.wiki-prose pre span {
+  color: #f1f5f9 !important;
+}
+
+
+.generated-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.generated-table-wrap table.generated-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+
+.generated-table-wrap th,
+.generated-table-wrap td {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.page-table-bleed {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Direct SVG override for all Mermaid versions & text elements */
+svg[id^="mermaid-"],
+.mermaid,
+div[class*="mermaid"] {
+  background-color: #ffffff !important;
+}
+
+/* Force light node fills — higher specificity to beat Mermaid ID-scoped rules */
+svg[id^="mermaid-"] .node rect,
+svg[id^="mermaid-"] .node circle,
+svg[id^="mermaid-"] .node polygon,
+svg[id^="mermaid-"] .node path,
+[id^="mermaid-"] .node rect,
+[id^="mermaid-"] .node circle,
+[id^="mermaid-"] .node polygon,
+[id^="mermaid-"] .node path,
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node polygon {
+  fill: #f0f9ff !important;
+  stroke: #2563eb !important;
+  stroke-width: 1.75px !important;
+}
+
+/* Force dark text on all label elements — including HTML labels (p, span, div) */
+svg[id^="mermaid-"] text,
+[id^="mermaid-"] text,
+.mermaid text,
+svg[id^="mermaid-"] .nodeLabel,
+[id^="mermaid-"] .nodeLabel,
+[id^="mermaid-"] .nodeLabel p,
+[id^="mermaid-"] .nodeLabel span,
+[id^="mermaid-"] .nodeLabel div,
+svg .nodeLabel,
+svg .nodeLabel p,
+svg .nodeLabel span,
+svg .node text,
+svg .edgeLabel,
+svg .edgeLabel span,
+svg .label text,
+svg .label span,
+svg .actor text,
+svg .messageText,
+svg .cluster-label text,
+svg .cluster-label span,
+svg text.actor > tspan,
+svg .noteText {
+  fill: #0f172a !important;
+  color: #0f172a !important;
+  font-family: Inter, system-ui, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+
+svg[id^="mermaid-"] .edgeLabel text,
+svg[id^="mermaid-"] .edgeLabel span,
+[id^="mermaid-"] .edgeLabel text,
+[id^="mermaid-"] .edgeLabel span,
+.mermaid .edgeLabel text,
+.mermaid .edgeLabel span {
+  fill: #1e293b !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  background-color: #ffffff !important;
+}
+
+/* Sequence diagram actors — force light fills */
+svg[id^="mermaid-"] .actor,
+[id^="mermaid-"] .actor,
+.mermaid .actor {
+  fill: #f0f9ff !important;
+  stroke: #2563eb !important;
+  stroke-width: 1.75px !important;
+}
+
+svg[id^="mermaid-"] .cluster rect,
+[id^="mermaid-"] .cluster rect,
+.mermaid .cluster rect {
+  stroke: #94a3b8 !important;
+  stroke-width: 1.5px !important;
+  fill: #f8fafc !important;
+}
+
+svg[id^="mermaid-"] .edgePath path,
+[id^="mermaid-"] .edgePath path,
+.mermaid .edgePath path {
+  stroke: #334155 !important;
+  stroke-width: 1.75px !important;
+}
+
+

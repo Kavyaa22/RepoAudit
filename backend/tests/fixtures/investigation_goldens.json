@@ -1,0 +1,156 @@
+{
+  "acceptance": {
+    "top3_locate_recall_with_log": 0.8,
+    "tier_a_must_clarify_or_partial": true,
+    "patch_ready_requires_checks_passed": true,
+    "median_first_answer_ms_target": 60000
+  },
+  "scenarios": [
+    {
+      "id": "auth-null-stack",
+      "tier": "C",
+      "issue_description": "Login fails when clicking submit",
+      "feature_name": "auth",
+      "action_name": "login",
+      "error_log": "AttributeError: 'NoneType' object has no attribute 'username' in backend/src/app/services/auth/login/handler.py line 42",
+      "expected_top3": ["backend/src/app/services/auth/login/handler.py"],
+      "expected_category": "null_pointer",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "billing-route-500",
+      "tier": "C",
+      "issue_description": "Checkout submit fails with server error",
+      "feature_name": "billing",
+      "action_name": "submit",
+      "error_log": "POST /api/billing/checkout 500",
+      "expected_top3": ["backend/src/routes/billing.py"],
+      "expected_category": "runtime_network",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "payment-signature",
+      "tier": "C",
+      "issue_description": "Checkout action fails with missing positional argument",
+      "feature_name": "payment",
+      "action_name": "checkout",
+      "error_log": "TypeError: missing required positional argument 'amount' in backend/src/app/services/payment/checkout/service.py",
+      "expected_top3": ["backend/src/app/services/payment/checkout/service.py"],
+      "expected_category": "signature_mismatch",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "mom-navigation",
+      "tier": "B",
+      "issue_description": "Redirect from transcript to mom panel scroll is broken",
+      "feature_name": "mom",
+      "action_name": "click",
+      "error_log": "",
+      "expected_top3": ["frontend/src/components/meetings/MOMDetailsSection.tsx", "frontend/src/utils/transcriptMomCoverage.ts"],
+      "expected_category": "navigation_mismatch",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "vague-tier-a",
+      "tier": "A",
+      "issue_description": "Something is not working",
+      "feature_name": "",
+      "action_name": "",
+      "error_log": "",
+      "expected_top3": [],
+      "expected_category": "unverified_logic_failure",
+      "expect_status": ["PARTIAL"],
+      "must_clarify": true
+    },
+    {
+      "id": "network-correlation",
+      "tier": "D",
+      "issue_description": "Submit hangs then fails",
+      "feature_name": "billing",
+      "action_name": "submit",
+      "error_log": "",
+      "live_artifacts": [
+        {
+          "kind": "network",
+          "content": "POST /api/billing/checkout 502 correlation_id=abc-123-xyz timeout after 20s"
+        }
+      ],
+      "expected_top3": ["backend/src/routes/billing.py"],
+      "expected_category": "runtime_network",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "import-error",
+      "tier": "C",
+      "issue_description": "App fails to start after deploy",
+      "feature_name": "auth",
+      "action_name": "boot",
+      "error_log": "ModuleNotFoundError: No module named 'auth.tokens' in backend/src/app/services/auth/login/handler.py",
+      "expected_top3": ["backend/src/app/services/auth/login/handler.py"],
+      "expected_category": "missing_import",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "frontend-undefined",
+      "tier": "C",
+      "issue_description": "Token badge crashes on profile page",
+      "feature_name": "auth",
+      "action_name": "view",
+      "error_log": "TypeError: cannot read property 'token' of undefined at frontend/src/app/services/auth/login/Component.tsx:18",
+      "expected_top3": ["frontend/src/app/services/auth/login/Component.tsx"],
+      "expected_category": "null_pointer",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "missing-mapping",
+      "tier": "B",
+      "issue_description": "Generated mom mappings are empty after reload so coverage highlight fails",
+      "feature_name": "mom",
+      "action_name": "reload",
+      "error_log": "",
+      "expected_top3": ["frontend/src/utils/transcriptMomCoverage.ts", "frontend/src/components/meetings/MOMDetailsSection.tsx"],
+      "expected_category": "missing_data",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "graph-neighbor",
+      "tier": "C",
+      "issue_description": "Login DTO mismatch breaks handler",
+      "feature_name": "auth",
+      "action_name": "login",
+      "error_log": "ValidationError invalid argument in backend/src/app/services/auth/login/handler.py",
+      "expected_top3": ["backend/src/app/services/auth/login/handler.py", "backend/src/app/services/auth/login/dto.py"],
+      "expected_category": "signature_mismatch",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    },
+    {
+      "id": "bare-500-weak",
+      "tier": "B",
+      "issue_description": "API returns 500 sometimes",
+      "feature_name": "billing",
+      "action_name": "submit",
+      "error_log": "500",
+      "expected_top3": [],
+      "expected_category": null,
+      "expect_status": ["PARTIAL", "SUCCESS"],
+      "allow_any_category": true
+    },
+    {
+      "id": "timing-hang",
+      "tier": "D",
+      "issue_description": "Submit button hangs indefinitely",
+      "feature_name": "billing",
+      "action_name": "submit",
+      "error_log": "",
+      "live_artifacts": [
+        {
+          "kind": "timing",
+          "content": "UI hung 25s waiting on POST /api/billing/checkout"
+        }
+      ],
+      "expected_top3": ["backend/src/routes/billing.py", "frontend/src/components/BillingForm.tsx"],
+      "expected_category": "runtime_network",
+      "expect_status": ["SUCCESS", "PARTIAL"]
+    }
+  ]
+}

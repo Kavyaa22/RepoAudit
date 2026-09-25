@@ -1,0 +1,21 @@
+# Railway — Backend service (Root Directory: /backend)
+#
+# Required:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+#   JWT_SECRET=<random-secret>
+#   CORS_ORIGINS=https://repository-audit.up.railway.app
+#   AUTH_DISABLED=false
+#
+# GitHub OAuth:
+#   GITHUB_OAUTH_REDIRECT_URI=https://repository-audit-production.up.railway.app/api/v1/github/oauth/callback
+#   GITHUB_OAUTH_FRONTEND_REDIRECT=https://repository-audit.up.railway.app/dashboard
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "sh -c 'export REPOAUDIT_SECURITY_TOOLS_DIR=\"${REPOAUDIT_SECURITY_TOOLS_DIR:-$PWD/.security-tools}\" && export PATH=\"$REPOAUDIT_SECURITY_TOOLS_DIR:$PATH\" && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}'"
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

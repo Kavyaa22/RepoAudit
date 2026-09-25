@@ -1,0 +1,1 @@
+"""Entity relationship modeling (stub)."""

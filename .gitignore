@@ -1,0 +1,53 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+.venv/
+venv/
+env/
+.security-tools/
+uv.lock
+
+.env
+.env.local
+
+# Prefer product-root env files:
+#   frontend/.env.example
+#   backend/.env.example
+
+*.db
+*.sqlite3
+
+.idea/
+.vscode/
+*.swp
+*.swo
+
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+node_modules/
+frontend/dist/
+backend/src/repoaudit/interfaces/api/static/
+backend/app/**/static/
+
+# Runtime directories
+backend/workspace/*
+!backend/workspace/.gitkeep
+backend/knowledge/*
+!backend/knowledge/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
+backend/temp/*
+!backend/temp/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
+
+.DS_Store
+Thumbs.db

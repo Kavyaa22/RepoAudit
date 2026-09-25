@@ -1,0 +1,1 @@
+"""Persisted semantic knowledge layer."""
